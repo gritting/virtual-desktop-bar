@@ -33,6 +33,13 @@ Item {
 
     Component.onCompleted: {
         manageDynamicDesktops();
+        Qt.callLater(updateScreenFiltering);
+    }
+
+    onParentChanged: {
+        if (parent) {
+            Qt.callLater(updateScreenFiltering);
+        }
     }
 
     property bool isRenamingDesktop: renamePopup.visible
@@ -98,8 +105,11 @@ Item {
 
     // Watch for changes to FilterByScreen config
     property bool filterByScreenValue: config.FilterByScreen
+    property bool screenFilteringEnabled: false
+    property rect screenFilteringGeometry: Qt.rect(0, 0, 0, 0)
+
     onFilterByScreenValueChanged: {
-        updateScreenFiltering();
+        Qt.callLater(updateScreenFiltering);
     }
 
     function updateScreenFiltering() {
@@ -107,9 +117,11 @@ Item {
         if (config.FilterByScreen && root.parent && root.parent.Screen) {
             const screen = root.parent.Screen;
             const geometry = Qt.rect(screen.virtualX, screen.virtualY, screen.width, screen.height);
-            Common.TaskManager.setScreenFiltering(true, geometry);
+            screenFilteringEnabled = true;
+            screenFilteringGeometry = geometry;
         } else {
-            Common.TaskManager.setScreenFiltering(false, Qt.rect(0, 0, 0, 0));
+            screenFilteringEnabled = false;
+            screenFilteringGeometry = Qt.rect(0, 0, 0, 0);
         }
     }
 
@@ -212,12 +224,15 @@ Item {
     }
 
     function checkEmptyDesktops() {
+        const screenFilteringEnabled = root.screenFilteringEnabled;
+        const screenFilteringGeometry = root.screenFilteringGeometry;
+
         if (config.EmptyDesktopName.length !== 0 && !config.DynamicDesktops) {
             let activityId = backend.getCurrentActivityId();
 
             for (let i = 0; i < desktopInfoList.count; i++) {
                 let desktop = desktopInfoList.get(i);
-                let isEmpty = !Common.TaskManager.hasWindows(desktop.uuid, activityId);
+                let isEmpty = !Common.TaskManager.hasWindows(desktop.uuid, activityId, screenFilteringEnabled, screenFilteringGeometry);
 
                 // Create a state key for this desktop
                 let stateKey = desktop.uuid + "|" + isEmpty + "|" + desktop.name;
@@ -245,6 +260,8 @@ Item {
     function manageDynamicDesktops() {
         if (!config.DynamicDesktops) return;
 
+        const screenFilteringEnabled = root.screenFilteringEnabled;
+        const screenFilteringGeometry = root.screenFilteringGeometry;
         let newDesktopName = config.EmptyDesktopName.length > 0 ? config.EmptyDesktopName : "New Desktop";
         let activityId = backend.getCurrentActivityId();
         let emptyDesktops = [];
@@ -253,7 +270,7 @@ Item {
         for (let i = 0; i < desktopInfoList.count; i++) {
             let desktop = desktopInfoList.get(i);
 
-            if (!Common.TaskManager.hasWindows(desktop.uuid, activityId)) {
+            if (!Common.TaskManager.hasWindows(desktop.uuid, activityId, screenFilteringEnabled, screenFilteringGeometry)) {
                 emptyDesktops.push(desktop.uuid);
             }
         }
@@ -284,10 +301,12 @@ Item {
     function updateWindowCounts() {
         if (!Common.TaskManager) return;
 
+        const screenFilteringEnabled = root.screenFilteringEnabled;
+        const screenFilteringGeometry = root.screenFilteringGeometry;
         let activityId = backend.getCurrentActivityId();
         for (let i = 0; i < desktopInfoList.count; i++) {
             let desktop = desktopInfoList.get(i);
-            let hasWindows = Common.TaskManager.hasWindows(desktop.uuid, activityId);
+            let hasWindows = Common.TaskManager.hasWindows(desktop.uuid, activityId, screenFilteringEnabled, screenFilteringGeometry);
             desktopInfoList.setProperty(i, "has_windows", hasWindows);
         }
     }

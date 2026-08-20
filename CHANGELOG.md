@@ -2,8 +2,11 @@
 
 ## Git
 
-### Changes
+### 1.5
 
+### Changes
+* Fixed per-monitor desktop filtering so each screen only shows occupied desktops relevant to that monitor
+* Restored the screen-aware task model context after startup/restore so multi-monitor desktop status remains correct
 * Added an option to specify the thickness of lines used as indicators
 * Fixed broken window detection (e.g. Steam or Spotify were affected by this)
 * Fixed an issue of not being able to select the Number style under certain conditions

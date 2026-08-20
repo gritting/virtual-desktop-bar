@@ -19,142 +19,154 @@ QtObject {
     signal screenFilteringChanged()
 
     function setScreenFiltering(enabled, geometry) {
-        tasksModel.filterByScreen = enabled;
+        // Retained for compatibility with older call sites. The actual screen-scoped state
+        // must be provided per call and not stored on the shared singleton.
         if (enabled && geometry) {
+            tasksModel.filterByScreen = true;
             tasksModel.screenGeometry = geometry;
+        } else {
+            tasksModel.filterByScreen = false;
+            tasksModel.screenGeometry = Qt.rect(0, 0, 0, 0);
         }
         screenFilteringChanged();
     }
 
-    function getActiveWindowName(desktopUuid, activityId) {
-        if (!desktopUuid) return "";
-
-        tasksModel.virtualDesktop = desktopUuid;
-        tasksModel.activity = activityId || "";
-
-        for (let i = 0; i < tasksModel.count; i++) {
-            const taskIndex = tasksModel.index(i, 0);
-            const isActive = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.IsActive);
-
-            if (isActive) {
-                const displayName = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.DisplayRole) || "";
-                activeWindowCache[desktopUuid] = displayName;
-                return displayName;
-            }
+    function withDesktopContext(desktopUuid, activityId, callback, screenFilteringEnabled = false, screenGeometry = Qt.rect(0, 0, 0, 0)) {
+        if (!desktopUuid) {
+            return callback();
         }
 
-        activeWindowCache[desktopUuid] = "";
-        return "";
-    }
-
-    function hasWindows(desktopUuid, activityId) {
-        if (!desktopUuid) return false;
+        const oldVirtualDesktop = tasksModel.virtualDesktop;
+        const oldActivity = tasksModel.activity;
+        const oldFilterByScreen = tasksModel.filterByScreen;
+        const oldScreenGeometry = tasksModel.screenGeometry;
 
         tasksModel.virtualDesktop = desktopUuid;
         tasksModel.activity = activityId || "";
+        tasksModel.filterByScreen = screenFilteringEnabled;
+        tasksModel.screenGeometry = screenFilteringEnabled ? (screenGeometry || Qt.rect(0, 0, 0, 0)) : Qt.rect(0, 0, 0, 0);
 
-        return tasksModel.count > 0;
+        try {
+            return callback();
+        } finally {
+            tasksModel.virtualDesktop = oldVirtualDesktop;
+            tasksModel.activity = oldActivity;
+            tasksModel.filterByScreen = oldFilterByScreen;
+            tasksModel.screenGeometry = oldScreenGeometry;
+        }
     }
 
-    function getWindowsForDesktop(desktopUuid, activityId) {
+    function getActiveWindowName(desktopUuid, activityId, screenFilteringEnabled = false, screenGeometry = Qt.rect(0, 0, 0, 0)) {
+        if (!desktopUuid) return "";
+
+        return withDesktopContext(desktopUuid, activityId, function() {
+            for (let i = 0; i < tasksModel.count; i++) {
+                const taskIndex = tasksModel.index(i, 0);
+                const isActive = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.IsActive);
+
+                if (isActive) {
+                    const displayName = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.DisplayRole) || "";
+                    activeWindowCache[desktopUuid] = displayName;
+                    return displayName;
+                }
+            }
+
+            activeWindowCache[desktopUuid] = "";
+            return "";
+        }, screenFilteringEnabled, screenGeometry);
+    }
+
+    function hasWindows(desktopUuid, activityId, screenFilteringEnabled = false, screenGeometry = Qt.rect(0, 0, 0, 0)) {
+        if (!desktopUuid) return false;
+
+        return withDesktopContext(desktopUuid, activityId, function() {
+            return tasksModel.count > 0;
+        }, screenFilteringEnabled, screenGeometry);
+    }
+
+    function getWindowsForDesktop(desktopUuid, activityId, screenFilteringEnabled = false, screenGeometry = Qt.rect(0, 0, 0, 0)) {
         const windows = [];
         if (!desktopUuid) return windows;
 
-        tasksModel.virtualDesktop = desktopUuid;
-        tasksModel.activity = activityId || "";
+        return withDesktopContext(desktopUuid, activityId, function() {
+            for (let i = 0; i < tasksModel.count; i++) {
+                const taskIndex = tasksModel.index(i, 0);
+                const appId = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.AppId) || "application-x-executable";
+                const appName = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.AppName) || "Unknown Application";
+                const isActive = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.IsActive) || false;
+                const genericName = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.GenericName) || "";
+                const isDemandingAttention = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.IsDemandingAttention) || false;
+                const rawWinId = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.WinIdList) || []
+                const rawActivities = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.Activities || []);
+                const desktopList = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.VirtualDesktops);
+                const skipPager = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.SkipPager) || false;
+                const skipTaskBar = false;
 
-        for (let i = 0; i < tasksModel.count; i++) {
-            const taskIndex = tasksModel.index(i, 0);
-            const appId = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.AppId) || "application-x-executable";
-            const appName = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.AppName) || "Unknown Application";
-            const isActive = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.IsActive) || false;
-            const genericName = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.GenericName) || "";
-            const isDemandingAttention = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.IsDemandingAttention) || false;
-            const rawWinId = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.WinIdList) || []
-            const rawActivities = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.Activities || []);
-            // const skipTaskBar = taskModel.data(taskIndex, TaskManager.AbstractTasksModel.SkipTaskBar) || false;
-            // TODO: TaskManager.AbstractTaskModel.SkipTaskBar is returning window title for some reason.  Remove
-            // when viable
-            const desktopList = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.VirtualDesktops);
-            const skipPager = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.SkipPager) || false;
-            const skipTaskBar = false;
+                if (skipPager || skipTaskBar) {
+                    continue;
+                }
 
+                if (!String(desktopList).includes(desktopUuid)) { continue; }
 
-            if (skipPager || skipTaskBar) {
-                continue;
+                let str = String(rawWinId);
+                let matches = str.match(/{([^}]+)}/);
+                const winId = matches && matches[1] ? matches[1] : str;
+
+                str = String(rawActivities);
+                matches = str.match(/{([^}]+)}/);
+                const taskActivities = matches && matches[1] ? matches[1] : str;
+
+                windows.push({
+                    appId: appId,
+                    appName: appName,
+                    isActive: isActive,
+                    genericName: genericName,
+                    isDemandingAttention: isDemandingAttention,
+                    winId: winId,
+                    activityId: taskActivities,
+                    skipTaskBar: skipTaskBar,
+                    skipPager: skipPager,
+                });
             }
 
-            // This is here to filter out windows with isDemandingAttention set.  I don't want them on every list
-            if (!String(desktopList).includes(desktopUuid)) { continue; }
-
-            let str = String(rawWinId);
-            let matches = str.match(/{([^}]+)}/);
-            const winId = matches && matches[1] ? matches[1] : str;
-
-            str = String(rawActivities);
-            matches = str.match(/{([^}]+)}/);
-            const taskActivities = matches && matches[1] ? matches[1] : str;
-
-            windows.push({
-                appId: appId,
-                appName: appName,
-                isActive: isActive,
-                genericName: genericName,
-                isDemandingAttention: isDemandingAttention,
-                winId: winId,
-                activityId: taskActivities,
-                skipTaskBar: skipTaskBar,
-                skipPager: skipPager,
-            });
-        }
-
-        return windows;
+            return windows;
+        }, screenFilteringEnabled, screenGeometry);
     }
 
-    function desktopNeedsAttention(desktopUuid, activityId) {
+    function desktopNeedsAttention(desktopUuid, activityId, screenFilteringEnabled = false, screenGeometry = Qt.rect(0, 0, 0, 0)) {
         if (!desktopUuid) return false;
 
-        tasksModel.virtualDesktop = desktopUuid;
-        tasksModel.activity = activityId || "";
-
-        for (let i = 0; i < tasksModel.count; i++) {
-            const taskIndex = tasksModel.index(i, 0);
-            const isDemandingAttention = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.IsDemandingAttention);
-            let rawActivities = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.Activities || []);
-
-            // const str = String(rawActivities);
-            // const matches = str.match(/{([^}]+)}/);
-            // const taskActivities = matches && matches[1] ? matches[1] : str;
-            //
-            // if (activityId !== taskActivities) { continue; }
-
-            const desktopList = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.VirtualDesktops);
-            if ((desktopList && String(desktopList).includes(desktopUuid)) && isDemandingAttention) {
-                return true;
+        return withDesktopContext(desktopUuid, activityId, function() {
+            for (let i = 0; i < tasksModel.count; i++) {
+                const taskIndex = tasksModel.index(i, 0);
+                const isDemandingAttention = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.IsDemandingAttention);
+                const desktopList = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.VirtualDesktops);
+                if ((desktopList && String(desktopList).includes(desktopUuid)) && isDemandingAttention) {
+                    return true;
+                }
             }
-        }
 
-        return false;
+            return false;
+        }, screenFilteringEnabled, screenGeometry);
     }
 
     function activateWindow(winId, desktopId, activityId) {
         if (!winId || !desktopId || !activityId) return false;
 
-        tasksModel.virtualDesktop = desktopId;
-        tasksModel.activity = activityId || "";
+        return withDesktopContext(desktopId, activityId, function() {
+            for (let i = 0; i < tasksModel.count; i++) {
+                const taskIndex = tasksModel.index(i, 0);
+                let rawWinId = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.WinIdList) || [];
 
-        for (let i = 0; i < tasksModel.count; i++) {
-            const taskIndex = tasksModel.index(i, 0);
-            let rawWinId = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.WinIdList) || [];
+                const str = String(rawWinId);
+                const matches = str.match(/{([^}]+)}/);
+                const compWinId = matches && matches[1] ? matches[1] : str;
 
-            const str = String(rawWinId);
-            const matches = str.match(/{([^}]+)}/);
-            const compWinId = matches && matches[1] ? matches[1] : str;
-
-            if (winId === compWinId) {
-                tasksModel.requestActivate(taskIndex);
+                if (winId === compWinId) {
+                    tasksModel.requestActivate(taskIndex);
+                }
             }
-        }
+        });
     }
 
     // Request entering the window at the given index on the specified virtual desktops.
@@ -165,20 +177,19 @@ QtObject {
     function requestVirtualDesktops(winId, sourceDesktopId, destDesktopIdList, activityId) {
         if (!winId || !sourceDesktopId || !activityId) return false;
 
-        tasksModel.virtualDesktop = sourceDesktopId;
-        tasksModel.activity = activityId || "";
+        return withDesktopContext(sourceDesktopId, activityId, function() {
+            for (let i = 0; i < tasksModel.count; i++) {
+                const taskIndex = tasksModel.index(i, 0);
+                let rawWinId = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.WinIdList) || [];
 
-        for (let i = 0; i < tasksModel.count; i++) {
-            const taskIndex = tasksModel.index(i, 0);
-            let rawWinId = tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.WinIdList) || [];
+                const str = String(rawWinId);
+                const matches = str.match(/{([^}]+)}/);
+                const compWinId = matches && matches[1] ? matches[1] : str;
 
-            const str = String(rawWinId);
-            const matches = str.match(/{([^}]+)}/);
-            const compWinId = matches && matches[1] ? matches[1] : str;
-
-            if (winId === compWinId) {
-                tasksModel.requestVirtualDesktops(taskIndex, destDesktopIdList);
+                if (winId === compWinId) {
+                    tasksModel.requestVirtualDesktops(taskIndex, destDesktopIdList);
+                }
             }
-        }
+        });
     }
 }

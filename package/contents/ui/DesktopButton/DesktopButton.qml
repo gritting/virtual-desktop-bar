@@ -449,9 +449,12 @@ Rectangle {
 
     function updateTaskInfo() {
         const activityId = backend.getCurrentActivityId();
-        activeWindowName = Common.TaskManager.getActiveWindowName(uuid, activityId);
-        isEmpty = !Common.TaskManager.hasWindows(uuid, activityId);
-        isUrgent = Common.TaskManager.desktopNeedsAttention(uuid, activityId);
+        const screenFilteringEnabled = buttonGrid && buttonGrid.container && buttonGrid.container.screenFilteringEnabled;
+        const screenFilteringGeometry = buttonGrid && buttonGrid.container && buttonGrid.container.screenFilteringGeometry;
+
+        activeWindowName = Common.TaskManager.getActiveWindowName(uuid, activityId, screenFilteringEnabled, screenFilteringGeometry);
+        isEmpty = !Common.TaskManager.hasWindows(uuid, activityId, screenFilteringEnabled, screenFilteringGeometry);
+        isUrgent = Common.TaskManager.desktopNeedsAttention(uuid, activityId, screenFilteringEnabled, screenFilteringGeometry);
 
         // Update appearance if properties changed
         Qt.callLater(applyOpacityRules);

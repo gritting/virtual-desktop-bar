@@ -180,7 +180,9 @@ Item {
 
         const activityId = backend.getCurrentActivityId();
         const activityName = backend.getActivityName(activityId);
-        const windows = Common.TaskManager.getWindowsForDesktop(sourceButton.uuid, activityId);
+        const screenFilteringEnabled = buttonGrid && buttonGrid.container && buttonGrid.container.screenFilteringEnabled;
+        const screenFilteringGeometry = buttonGrid && buttonGrid.container && buttonGrid.container.screenFilteringGeometry;
+        const windows = Common.TaskManager.getWindowsForDesktop(sourceButton.uuid, activityId, screenFilteringEnabled, screenFilteringGeometry);
 
         if (windows.length > 0) {
             windowListHeader.windowCount = `${windows.length} window${windows.length > 1 ? 's' : ''}`;

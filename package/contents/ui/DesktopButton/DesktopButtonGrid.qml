@@ -496,9 +496,12 @@ Item {
                 let minIdx = Math.min(originalIndex, targetIndex);
                 let maxIdx = Math.max(originalIndex, targetIndex);
 
+                const screenFilteringEnabled = desktopButtonGrid.container && desktopButtonGrid.container.screenFilteringEnabled;
+                const screenFilteringGeometry = desktopButtonGrid.container && desktopButtonGrid.container.screenFilteringGeometry;
+
                 for (let i = minIdx; i <= maxIdx; i++) {
                     let desktop = desktopInfoList.get(i);
-                    let windows = Common.TaskManagerUtils.getWindowsForDesktop(desktop.uuid, activityId);
+                    let windows = Common.TaskManagerUtils.getWindowsForDesktop(desktop.uuid, activityId, screenFilteringEnabled, screenFilteringGeometry);
                     desktopData.push({
                         index: i,
                         uuid: desktop.uuid,
